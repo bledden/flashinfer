@@ -2586,15 +2586,6 @@ void launchMHA(
 }
 #endif
 
-static uint32_t configureKernel() {
-  uint32_t size;
-  cudaMemcpyFromSymbol(&size, smemSize, sizeof(smemSize));
-  cudaFuncSetAttribute(kernel_mha, cudaFuncAttributeMaxDynamicSharedMemorySize, size);
-  return size;
-}
-
-static uint32_t const hostSmemSize = configureKernel();
-
 void launchMHAFlashInfer(uint32_t multiProcessorCount, uint32_t nbKHeads, uint32_t slidingWinSize,
                          float qScale, float const* qScalePtr, OutputHead* output,
 #if LOW_PREC_OUTPUT
@@ -2610,6 +2601,12 @@ void launchMHAFlashInfer(uint32_t multiProcessorCount, uint32_t nbKHeads, uint32
                          uint32_t* semaphores, void* scratch, bool enable_pdl,
                          uint64_t kv_stride_page, uint64_t kv_stride_token, uint64_t kv_stride_head,
                          cudaStream_t stream) {
+  static uint32_t const hostSmemSize = []() {
+    uint32_t size;
+    checkCuda(cudaMemcpyFromSymbol(&size, smemSize, sizeof(smemSize)));
+    checkCuda(cudaFuncSetAttribute(kernel_mha, cudaFuncAttributeMaxDynamicSharedMemorySize, size));
+    return size;
+  }();
   uint32_t const nbSubSeqPerSeq = [&]() -> uint32_t {
     if (!allowMultiBlockMode) {
       return 1;
